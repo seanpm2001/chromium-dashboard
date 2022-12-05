@@ -500,18 +500,6 @@ def feature_entry_to_json_basic(fe: FeatureEntry) -> dict[str, Any]:
     'unlisted': fe.unlisted,
     'breaking_change': fe.breaking_change,
     'blink_components': fe.blink_components or [],
-    'resources': {
-      'samples': fe.sample_links or [],
-      'docs': fe.doc_links or [],
-    },
-    'standards': {
-      'spec': fe.spec_link,
-      'maturity': {
-        'text': STANDARD_MATURITY_CHOICES.get(fe.standard_maturity),
-        'short_text': STANDARD_MATURITY_SHORT.get(fe.standard_maturity),
-        'val': fe.standard_maturity,
-      },
-    },
     'browsers': {
       'chrome': {
         'bug': fe.bug_url,

@@ -34,7 +34,7 @@ class FeaturesJsonHandler(basehandlers.FlaskHandler):
 
   def get_template_data(self, **kwargs):
     user = users.get_current_user()
-    feature_list = feature_helpers.get_features_by_impl_status(
+    feature_list = feature_helpers.get_chronological(
         show_unlisted=permissions.can_edit_any_feature(user))
     return feature_list
 
