@@ -23,7 +23,7 @@ from api import converters
 from framework import rediscache
 from framework import users
 from internals.core_enums import *
-from internals.core_models import Feature, FeatureEntry, Stage
+from internals.core_models import Feature, FeatureEntry
 import settings
 
 
@@ -34,7 +34,6 @@ def _crbug_number(bug_url: Optional[str]) -> Optional[str]:
   if m:
     return m.group(1)
   return None
-
 
 def _new_crbug_url(blink_components: Optional[list[str]],
     bug_url: Optional[str], impl_status_chrome: int,
@@ -56,7 +55,6 @@ def _new_crbug_url(blink_components: Optional[list[str]],
   if owner_emails:
     params.append('cc=' + ','.join(owner_emails))
   return url + '?' + '&'.join(params)
-
 
 def get_by_ids_legacy(feature_ids: list[int],
     update_cache: bool=False) -> list[dict[str, Any]]:
@@ -97,7 +95,6 @@ def get_by_ids_legacy(feature_ids: list[int],
       result_dict[feature_id] for feature_id in feature_ids
       if feature_id in result_dict]
   return result_list
-
 
 def get_all_legacy(limit=None, order='-updated', filterby=None,
             update_cache=False, keys_only=False):
@@ -289,21 +286,6 @@ def get_chronological(limit=None, update_cache: bool=False,
   return feature_list
 
 
-def _get_entries_by_id_async(ids) -> Future | None:
-  if ids:
-    q = FeatureEntry.query(FeatureEntry.key.IN(
-        [ndb.Key('FeatureEntry', id) for id in ids]))
-    q = q.order(FeatureEntry.name)
-    return q.fetch_async()
-  return None
-
-
-def _get_future_results(async_features: Future | None) -> list[FeatureEntry]:
-  if async_features is None:
-    return []
-  return async_features.result()
-
-
 def get_in_milestone(milestone: int,
     show_unlisted: bool=False) -> dict[str, list[dict[str, Any]]]:
   """Return {reason: [feature_dict]} with all the reasons a feature can
@@ -316,12 +298,12 @@ def get_in_milestone(milestone: int,
   """
   features_by_type = {}
   cache_key = '%s|%s|%s' % (
-      FeatureEntry.DEFAULT_CACHE_KEY, 'milestone', milestone)
+      Feature.DEFAULT_CACHE_KEY, 'milestone', milestone)
   cached_features_by_type = rediscache.get(cache_key)
   if cached_features_by_type:
     features_by_type = cached_features_by_type
   else:
-    all_features: dict[str, list[FeatureEntry]] = {}
+    all_features: dict[str, list[Feature]] = {}
     all_features[IMPLEMENTATION_STATUS[ENABLED_BY_DEFAULT]] = []
     all_features[IMPLEMENTATION_STATUS[DEPRECATED]] = []
     all_features[IMPLEMENTATION_STATUS[REMOVED]] = []
@@ -332,102 +314,63 @@ def get_in_milestone(milestone: int,
     logging.info('Getting chronological feature list in milestone %d',
                 milestone)
     # Start each query asynchronously in parallel.
+    q = Feature.query()
+    q = q.order(Feature.name)
+    q = q.filter(Feature.shipped_milestone == milestone)
+    desktop_shipping_features_future = q.fetch_async(None)
 
-    # Shipping stages with a matching desktop milestone.
-    # Note: Enterprise features use STAGE_ENT_ROLLOUT and are NOT included.
-    q = Stage.query(Stage.milestones.desktop_first == milestone,
-        ndb.OR(Stage.stage_type == STAGE_BLINK_SHIPPING,
-            Stage.stage_type == STAGE_PSA_SHIPPING,
-            Stage.stage_type == STAGE_FAST_SHIPPING,
-            Stage.stage_type == STAGE_DEP_SHIPPING))
-    q = q.filter()
-    desktop_shipping_future = q.fetch_async()
+    # Features with an android shipping milestone but no desktop milestone.
+    q = Feature.query()
+    q = q.order(Feature.name)
+    q = q.filter(Feature.shipped_android_milestone == milestone)
+    q = q.filter(Feature.shipped_milestone == None)
+    android_only_shipping_features_future = q.fetch_async(None)
 
-    # Shipping stages with a matching android shipping milestone
-    # but no desktop milestone.
-    q = Stage.query(Stage.milestones.android_first == milestone,
-        Stage.milestones.desktop_first == None,
-        Stage.stage_type.IN((STAGE_BLINK_SHIPPING, STAGE_PSA_SHIPPING,
-            STAGE_FAST_SHIPPING, STAGE_DEP_SHIPPING)))
-    android_only_shipping_future = q.fetch_async()
+    # Features that are in origin trial (Desktop) in this milestone
+    q = Feature.query()
+    q = q.order(Feature.name)
+    q = q.filter(Feature.ot_milestone_desktop_start == milestone)
+    desktop_origin_trial_features_future = q.fetch_async(None)
 
-    # Origin trial stages (Desktop) in this milestone.
-    q = Stage.query(Stage.milestones.desktop_first == milestone,
-        Stage.stage_type.IN((STAGE_BLINK_ORIGIN_TRIAL, STAGE_FAST_ORIGIN_TRIAL,
-            STAGE_DEP_DEPRECATION_TRIAL)))
-    desktop_origin_trial_future = q.fetch_async()
+    # Features that are in origin trial (Android) in this milestone
+    q = Feature.query()
+    q = q.order(Feature.name)
+    q = q.filter(Feature.ot_milestone_android_start == milestone)
+    q = q.filter(Feature.ot_milestone_desktop_start == None)
+    android_origin_trial_features_future = q.fetch_async(None)
 
-    # Origin trial stages (Android) in this milestone.
-    q = Stage.query(Stage.milestones.android_first == milestone,
-        Stage.milestones.desktop_first == None,
-        Stage.stage_type.IN((STAGE_BLINK_ORIGIN_TRIAL, STAGE_FAST_ORIGIN_TRIAL,
-            STAGE_DEP_DEPRECATION_TRIAL)))
-    android_origin_trial_future = q.fetch_async()
+    # Features that are in origin trial (Webview) in this milestone
+    q = Feature.query()
+    q = q.order(Feature.name)
+    q = q.filter(Feature.ot_milestone_webview_start == milestone)
+    q = q.filter(Feature.ot_milestone_desktop_start == None)
+    webview_origin_trial_features_future = q.fetch_async(None)
 
-    # Origin trial stages (Webview) in this milestone.
-    q = Stage.query(Stage.milestones.webview_first == milestone,
-        Stage.milestones.desktop_first == None,
-        Stage.stage_type.IN((STAGE_BLINK_ORIGIN_TRIAL, STAGE_FAST_ORIGIN_TRIAL,
-            STAGE_DEP_DEPRECATION_TRIAL)))
-    webview_origin_trial_future = q.fetch_async()
+    # Features that are in dev trial (Desktop) in this milestone
+    q = Feature.query()
+    q = q.order(Feature.name)
+    q = q.filter(Feature.dt_milestone_desktop_start == milestone)
+    desktop_dev_trial_features_future = q.fetch_async(None)
 
-    # Dev trial stages (Desktop) in this milestone.
-    q = Stage.query(Stage.milestones.desktop_first == milestone,
-        Stage.stage_type.IN((STAGE_BLINK_DEV_TRIAL, STAGE_PSA_DEV_TRIAL,
-            STAGE_FAST_DEV_TRIAL, STAGE_DEP_DEV_TRIAL)))
-    desktop_dev_trial_future = q.fetch_async()
+    # Features that are in dev trial (Android) in this milestone
+    q = Feature.query()
+    q = q.order(Feature.name)
+    q = q.filter(Feature.dt_milestone_android_start == milestone)
+    q = q.filter(Feature.dt_milestone_desktop_start == None)
+    android_dev_trial_features_future = q.fetch_async(None)
 
-    # Dev trial stages (Android) in this milestone.
-    q = Stage.query(Stage.milestones.android_first == milestone,
-        Stage.milestones.desktop_first == None,
-        Stage.stage_type.IN((STAGE_BLINK_DEV_TRIAL, STAGE_PSA_DEV_TRIAL,
-            STAGE_FAST_DEV_TRIAL, STAGE_DEP_DEV_TRIAL)))
-    android_dev_trial_future = q.fetch_async()
-
-    # Wait for all futures to complete and collect unique feature IDs.
-    desktop_shipping_ids = list({
-        *[s.feature_id for s in desktop_shipping_future.result()]})
-    android_only_shipping_ids = list({
-        *[s.feature_id for s in android_only_shipping_future.result()]})
-    desktop_origin_trials_ids = list({
-        *[s.feature_id for s in desktop_origin_trial_future.result()]})
-    android_origin_trials_ids = list({
-        *[s.feature_id for s in android_origin_trial_future.result()]})
-    webview_origin_trials_ids = list({
-        *[s.feature_id for s in webview_origin_trial_future.result()]})
-    desktop_dev_trials_ids = list({
-        *[s.feature_id for s in desktop_dev_trial_future.result()]})
-    android_dev_trials_ids = list({
-        *[s.feature_id for s in android_dev_trial_future.result()]})
-
-    # Query for FeatureEntry entities that match the stage feature IDs.
-    # Querying with an empty list will raise an error, so check if each
-    # list is not empty first.
-    desktop_shipping_future = _get_entries_by_id_async(desktop_shipping_ids)
-    android_only_shipping_future = _get_entries_by_id_async(
-        android_only_shipping_ids)
-    desktop_origin_trial_future = _get_entries_by_id_async(
-        desktop_origin_trials_ids)
-    android_origin_trial_future = _get_entries_by_id_async(
-        android_origin_trials_ids)
-    webview_origin_trial_future = _get_entries_by_id_async(
-        webview_origin_trials_ids)
-    desktop_dev_trial_future = _get_entries_by_id_async(
-        desktop_dev_trials_ids)
-    android_dev_trial_future = _get_entries_by_id_async(
-        android_dev_trials_ids)
-
-    desktop_shipping_features = _get_future_results(desktop_shipping_future)
-    android_only_shipping_features = _get_future_results(
-        android_only_shipping_future)
-    desktop_origin_trial_features = _get_future_results(
-        desktop_origin_trial_future)
-    android_origin_trial_features = _get_future_results(
-        android_origin_trial_future)
-    webview_origin_trial_features = _get_future_results(
-        webview_origin_trial_future)
-    desktop_dev_trial_features = _get_future_results(desktop_dev_trial_future)
-    android_dev_trial_features = _get_future_results(android_dev_trial_future)
+    # Wait for all futures to complete.
+    desktop_shipping_features = desktop_shipping_features_future.result()
+    android_only_shipping_features = (
+        android_only_shipping_features_future.result())
+    desktop_origin_trial_features = (
+        desktop_origin_trial_features_future.result())
+    android_origin_trial_features = (
+        android_origin_trial_features_future.result())
+    webview_origin_trial_features = (
+        webview_origin_trial_features_future.result())
+    desktop_dev_trial_features = desktop_dev_trial_features_future.result()
+    android_dev_trial_features = android_dev_trial_features_future.result()
 
     # Push feature to list corresponding to the implementation status of
     # feature in queried milestone
@@ -481,7 +424,7 @@ def get_in_milestone(milestone: int,
       all_features[shipping_type].sort(key=lambda f: f.name)
       all_features[shipping_type] = [
           f for f in all_features[shipping_type] if not f.deleted]
-      features_by_type[shipping_type] = [converters.feature_entry_to_json_basic(f)
+      features_by_type[shipping_type] = [converters.feature_to_legacy_json(f)
           for f in all_features[shipping_type]]
 
     rediscache.set(cache_key, features_by_type)
@@ -492,33 +435,6 @@ def get_in_milestone(milestone: int,
           features_by_type[shipping_type])
 
   return features_by_type
-
-def get_all_with_statuses(statuses, update_cache=False):
-  """Return JSON dicts for entities with the given statuses.
-
-  Because the cache may rarely have stale data, this should only be
-  used for displaying data read-only, not for populating forms or
-  procesing a POST to edit data.  For editing use case, load the
-  data from NDB directly.
-  """
-  if not statuses:
-    return []
-
-  KEY = '%s|%s' % (Feature.DEFAULT_CACHE_KEY, sorted(statuses))
-
-  feature_list = rediscache.get(KEY)
-
-  if feature_list is None or update_cache:
-    # There's no way to do an OR in a single datastore query, and there's a
-    # very good chance that the self.get_all() results will already be in
-    # rediscache, so use an array comprehension to grab the features we
-    # want from the array of everything.
-    feature_list = [
-        feature for feature in get_all(update_cache=update_cache)
-        if feature['browsers']['chrome']['status']['text'] in statuses]
-    rediscache.set(KEY, feature_list)
-
-  return feature_list
 
 def get_all(limit: Optional[int]=None,
     order: str='-updated', filterby: Optional[tuple[str, Any]]=None,
@@ -531,7 +447,7 @@ def get_all(limit: Optional[int]=None,
   data from NDB directly.
   """
   KEY = '%s|%s|%s|%s' % (
-      FeatureEntry.DEFAULT_CACHE_KEY, order, limit, keys_only)
+      Feature.DEFAULT_CACHE_KEY, order, limit, keys_only)
 
   # TODO(ericbidelman): Support more than one filter.
   if filterby is not None:
@@ -541,8 +457,8 @@ def get_all(limit: Optional[int]=None,
   feature_list = rediscache.get(KEY)
 
   if feature_list is None or update_cache:
-    query = FeatureEntry.query().order(-FeatureEntry.updated) #.order('name')
-    query = query.filter(FeatureEntry.deleted == False)
+    query = Feature.query().order(-Feature.updated) #.order('name')
+    query = query.filter(Feature.deleted == False)
 
     # TODO(ericbidelman): Support more than one filter.
     if filterby:
@@ -552,49 +468,20 @@ def get_all(limit: Optional[int]=None,
         # This includes being an owner, editor, or the original creator
         # of the feature.
         query = query.filter(
-          ndb.OR(FeatureEntry.owner_emails == comparator,
-              FeatureEntry.editor_emails == comparator,
-              FeatureEntry.creator_email == comparator))
+          ndb.OR(Feature.owner == comparator,
+              Feature.editors == comparator,
+              Feature.creator == comparator))
       else:
-        query = query.filter(getattr(FeatureEntry, filter_type) == comparator)
+        query = query.filter(getattr(Feature, filter_type) == comparator)
 
     feature_list = query.fetch(limit, keys_only=keys_only)
     if not keys_only:
       feature_list = [
-          converters.feature_entry_to_json_basic(f) for f in feature_list]
+          converters.feature_to_legacy_json(f) for f in feature_list]
 
     rediscache.set(KEY, feature_list)
 
   return feature_list
-
-def get_feature(
-      feature_id: int, update_cache: bool=False) -> Optional[FeatureEntry]:
-  """Return a JSON dict for a feature.
-
-  Because the cache may rarely have stale data, this should only be
-  used for displaying data read-only, not for populating forms or
-  procesing a POST to edit data.  For editing use case, load the
-  data from NDB directly.
-  """
-  KEY = Feature.feature_cache_key(FeatureEntry.DEFAULT_CACHE_KEY, feature_id)
-  feature = rediscache.get(KEY)
-
-  if feature is None or update_cache:
-    unformatted_feature: Optional[FeatureEntry] = (
-        FeatureEntry.get_by_id(feature_id))
-    if unformatted_feature:
-      if unformatted_feature.deleted:
-        return None
-      feature = converters.feature_entry_to_json_verbose(unformatted_feature)
-      feature['updated_display'] = (
-          unformatted_feature.updated.strftime("%Y-%m-%d"))
-      feature['new_crbug_url'] = _new_crbug_url(
-          unformatted_feature.blink_components, unformatted_feature.bug_url,
-          unformatted_feature.impl_status_chrome,
-          unformatted_feature.owner_emails)
-      rediscache.set(KEY, feature)
-
-  return feature
 
 def get_by_ids(feature_ids: list[int],
     update_cache: bool=False) -> list[dict[str, Any]]:
@@ -639,3 +526,48 @@ def get_by_ids(feature_ids: list[int],
       result_dict[feature_id] for feature_id in feature_ids
       if feature_id in result_dict]
   return result_list
+
+def get_features_by_impl_status(limit: int | None=None, update_cache: bool=False,
+    show_unlisted: bool=False) -> list[dict]:
+  """Return a list of JSON dicts for features, ordered by chrome_impl_status.
+
+  Because the cache may rarely have stale data, this should only be
+  used for displaying data read-only, not for populating forms or
+  procesing a POST to edit data.  For editing use case, load the
+  data from NDB directly.
+  """
+  cache_key = '%s|%s|%s|%s' % (FeatureEntry.DEFAULT_CACHE_KEY,
+                                'impl_order', limit, show_unlisted)
+
+  feature_list = rediscache.get(cache_key)
+  logging.info('getting feature list, sorted by chrome_impl_status')
+
+  # On cache miss, do a db query.
+  if not feature_list or update_cache:
+    logging.info('recomputing feature list')
+    # Get features by implementation status.
+    futures: list[Future] = []
+    for impl_status in IMPLEMENTATION_STATUS.keys():
+      q = FeatureEntry.query(FeatureEntry.impl_status_chrome == impl_status)
+      q = q.order(FeatureEntry.impl_status_chrome)
+      q = q.order(FeatureEntry.name)
+      futures.append(q.fetch_async(None))
+    # Put "No active development" at end of list.
+    futures = futures[1:] + futures[0:1]
+    logging.info('Waiting on futures')
+    query_results = [future.result() for future in futures]
+
+    # Construct the proper ordering.
+    feature_list = []
+    for section in query_results:
+      if len(section) > 0:
+        section = [
+            converters.feature_entry_to_json_basic(f) for f in section]
+        section[0]['first_of_section'] = True
+        if not show_unlisted:
+          section = filter_unlisted(section)
+        feature_list.extend(section)
+
+    rediscache.set(cache_key, feature_list)
+
+  return feature_list
