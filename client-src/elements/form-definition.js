@@ -6,7 +6,7 @@ import {
 
 
 const COMMA_SEPARATED_FIELDS = ['owner', 'editors', 'cc_recipients',
-  'spec_mentors', 'search_tags', 'devrel', 'i2e_lgtms', 'i2s_lgtms'];
+  'spec_mentors', 'search_tags', 'devrel'];
 
 const LINE_SEPARATED_FIELDS = ['explainer_links', 'doc_links', 'sample_links'];
 
@@ -174,7 +174,6 @@ const FLAT_ORIGIN_TRIAL_FIELDS = [
   'experiment_extension_reason', 'ongoing_constraints',
   // TODO(jrobbins): display r4dt_url instead when deprecating.
   'intent_to_experiment_url', 'intent_to_extend_experiment_url',
-  'i2e_lgtms',
   'origin_trial_feedback_url',
 
   // Implementation
@@ -189,7 +188,7 @@ const FLAT_PREPARE_TO_SHIP_FIELDS = [
   // Standardization
   'tag_review', 'tag_review_status',
   'webview_risks', 'anticipated_spec_changes',
-  'intent_to_ship_url', 'i2s_lgtms',
+  'intent_to_ship_url',
   // Implementation
   'measurement',
   'non_oss_deps',
@@ -306,8 +305,7 @@ const NEWFEATURE_ORIGINTRIAL = [
   'experiment_goals', 'experiment_risks',
   'experiment_extension_reason', 'ongoing_constraints',
   'origin_trial_feedback_url', 'intent_to_experiment_url',
-  'intent_to_extend_experiment_url',
-  'i2e_lgtms', 'comments',
+  'intent_to_extend_experiment_url', 'comments',
 ];
 
 const IMPLSTATUS_ORIGINTRIAL = [
@@ -320,7 +318,7 @@ const IMPLSTATUS_ORIGINTRIAL = [
 const MOST_PREPARETOSHIP = [
   'tag_review', 'tag_review_status', 'non_oss_deps',
   'webview_risks', 'anticipated_spec_changes', 'origin_trial_feedback_url',
-  'launch_bug_url', 'intent_to_ship_url', 'i2s_lgtms', 'comments',
+  'launch_bug_url', 'intent_to_ship_url', 'comments',
 ];
 
 const ANY_SHIP = ['launch_bug_url', 'finch_url', 'comments'];
@@ -335,7 +333,7 @@ const EXISTING_ORIGINTRIAL = [
   'experiment_goals', 'experiment_risks',
   'experiment_extension_reason', 'ongoing_constraints',
   'intent_to_experiment_url', 'intent_to_extend_experiment_url',
-  'i2e_lgtms', 'origin_trial_feedback_url', 'comments',
+  'origin_trial_feedback_url', 'comments',
 ];
 
 const PSA_IMPLEMENT = ['motivation', 'spec_link', 'standard_maturity', 'comments'];
@@ -366,13 +364,12 @@ const DEPRECATION_DEPRECATIONTRIAL = [
   'experiment_extension_reason', 'ongoing_constraints',
   'r4dt_url', // map to name="intent_to_experiment_url" field upon form submission
   'intent_to_extend_experiment_url',
-  'r4dt_lgtms', // map to name="i2e_lgtms" field upon form submission
   'origin_trial_feedback_url', 'comments',
 ];
 
 // Note: Even though this is similar to another form, it is likely to change.
 const DEPRECATION_PREPARETOSHIP = [
-  'impl_status_chrome', 'intent_to_ship_url', 'i2s_lgtms',
+  'impl_status_chrome', 'intent_to_ship_url',
   'launch_bug_url', 'comments',
 ];
 

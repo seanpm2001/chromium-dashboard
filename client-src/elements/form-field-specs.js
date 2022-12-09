@@ -895,39 +895,6 @@ export const ALL_FIELDS = {
       link to it here.`,
   },
 
-  'i2e_lgtms': {
-    type: 'input',
-    attrs: MULTI_EMAIL_FIELD_ATTRS,
-    required: false,
-    label: 'Intent to Experiment LGTM by',
-    help_text: html`
-      Full email address of API owner who LGTM\'d the
-      Intent to Experiment email thread.`,
-  },
-
-  'i2s_lgtms': {
-    type: 'input',
-    attrs: MULTI_EMAIL_FIELD_ATTRS,
-    required: false,
-    label: 'Intent to Ship LGTMs by',
-    help_text: html`
-      Comma separated list of
-      email addresses of API owners who LGTM'd
-      the Intent to Ship email thread.  `,
-  },
-
-  'r4dt_lgtms': {
-    // form field name matches underlying DB field (sets "i2e_lgtms" field in DB).
-    name: 'i2e_lgtms',
-    type: 'input',
-    attrs: MULTI_EMAIL_FIELD_ATTRS,
-    required: false,
-    label: 'Request for Deprecation Trial LGTM by',
-    help_text: html`
-      Full email addresses of API owners who LGTM\'d
-      the Request for Deprecation Trial email thread.`,
-  },
-
   'debuggability': {
     type: 'textarea',
     required: false,
@@ -1251,7 +1218,6 @@ export const DISPLAY_FIELDS_IN_STAGES = {
     'origin_trial_feedback_url', 'intent_to_experiment_url',
     'r4dt_url',
     'intent_to_extend_experiment_url',
-    'i2e_lgtms', 'r4dt_lgtms',
     'ot_milestone_desktop_start', 'ot_milestone_desktop_end',
     'ot_milestone_android_start', 'ot_milestone_android_end',
     'ot_milestone_webview_start', 'ot_milestone_webview_end',
@@ -1261,7 +1227,7 @@ export const DISPLAY_FIELDS_IN_STAGES = {
     'finch_url', 'anticipated_spec_changes',
     'shipped_milestone', 'shipped_android_milestone',
     'shipped_ios_milestone', 'shipped_webview_milestone',
-    'intent_to_ship_url', 'i2s_lgtms',
+    'intent_to_ship_url',
   ]),
   [INTENT_STAGES.INTENT_ROLLOUT[0]]: makeDisplaySpecs([
     'rollout_milestone', 'rollout_platforms', 'rollout_details',
